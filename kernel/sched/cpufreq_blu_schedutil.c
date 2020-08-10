@@ -22,6 +22,8 @@
 
 #include <trace/events/power.h>
 
+#include <trace/events/power.h>
+
 #include "sched.h"
 #include "tune.h"
 
