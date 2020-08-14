@@ -21,6 +21,7 @@
 #include "tune.h"
 #include "ems/ems.h"
 
+#define LATENCY_MULTIPLIER  (500)
 #define SUGOV_KTHREAD_PRIORITY	50
 
 unsigned long
