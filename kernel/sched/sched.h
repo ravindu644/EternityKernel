@@ -2203,6 +2203,23 @@ struct _eenv_debug {
 };
 #endif
 
+/* EAS governors */
+#ifdef CONFIG_SMP
+struct sched_walt_cpu_load {
+	unsigned long prev_window_util;
+	unsigned long nl;
+	unsigned long pl;
+	u64 ws;
+};
+#endif
+
+#ifdef CONFIG_SCHED_WALT
+extern unsigned long
+boosted_cpu_util(int cpu, unsigned long other_util);
+#endif
+
+
+
 struct eenv_cpu {
 	/* CPU ID, must be in cpus_mask */
 	int     cpu_id;

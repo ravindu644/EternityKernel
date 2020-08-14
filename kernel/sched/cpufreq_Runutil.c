@@ -14,12 +14,24 @@
 #include <linux/cpufreq.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
+#include <linux/sched.h>
 #include <trace/events/power.h>
 #include <linux/sched/sysctl.h>
 #include "sched.h"
 #include "tune.h"
+#include "ems/ems.h"
 
 #define SUGOV_KTHREAD_PRIORITY	50
+
+unsigned long
+boosted_cpu_util(int cpu);
+
+static ktime_t ktime_last;
+static __read_mostly bool walt_ktime_suspended;
+
+struct sched_param {
+	int sched_priority;
+};
 
 struct sugov_tunables {
 	struct gov_attr_set attr_set;
@@ -173,14 +185,14 @@ static void sugov_get_util(unsigned long *util, unsigned long *max, int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
 	unsigned long cfs_max;
-	struct sugov_cpu *loadcpu = &per_cpu(sugov_cpu, cpu);
+	// struct sugov_cpu *loadcpu = &per_cpu(sugov_cpu, cpu);
 
 	cfs_max = arch_scale_cpu_capacity(NULL, cpu);
 
 	*util = min(rq->cfs.avg.util_avg, cfs_max);
 	*max = cfs_max;
 
-	*util = boosted_cpu_util(cpu, &loadcpu->walt_load);
+	*util = boosted_cpu_util(cpu);
 }
 
 static void sugov_set_iowait_boost(struct sugov_cpu *sg_cpu, u64 time,
@@ -295,6 +307,7 @@ static void sugov_track_cycles(struct sugov_policy *sg_policy,
 				u64 upto)
 {
 	u64 delta_ns, cycles;
+    unsigned int sysctl_sched_use_walt_cpu_util;
 
 	if (unlikely(!sysctl_sched_use_walt_cpu_util))
 		return;
@@ -313,6 +326,8 @@ static void sugov_calc_avg_cap(struct sugov_policy *sg_policy, u64 curr_ws,
 {
 	u64 last_ws = sg_policy->last_ws;
 	unsigned int avg_freq;
+    unsigned int walt_ravg_window;
+    unsigned int sysctl_sched_use_walt_cpu_util;
 
 	if (unlikely(!sysctl_sched_use_walt_cpu_util))
 		return;
@@ -322,14 +337,14 @@ static void sugov_calc_avg_cap(struct sugov_policy *sg_policy, u64 curr_ws,
 		return;
 
 	/* If we skipped some windows */
-	if (curr_ws > (last_ws + sched_ravg_window)) {
+	if (curr_ws > (last_ws + walt_ravg_window)) {
 		avg_freq = prev_freq;
 		/* Reset tracking history */
 		sg_policy->last_cyc_update_time = curr_ws;
 	} else {
 		sugov_track_cycles(sg_policy, prev_freq, curr_ws);
 		avg_freq = sg_policy->curr_cycles;
-		avg_freq /= sched_ravg_window / (NSEC_PER_SEC / KHZ);
+		avg_freq /= walt_ravg_window / (NSEC_PER_SEC / KHZ);
 	}
 	sg_policy->avg_cap = freq_to_util(sg_policy, avg_freq);
 	sg_policy->curr_cycles = 0;
@@ -346,6 +361,7 @@ static void sugov_walt_adjust(struct sugov_cpu *sg_cpu, unsigned long *util,
 	unsigned long nl = sg_cpu->walt_load.nl;
 	unsigned long cpu_util = sg_cpu->util;
 	bool is_hiload;
+    unsigned int sysctl_sched_use_walt_cpu_util;
 
 	if (unlikely(!sysctl_sched_use_walt_cpu_util))
 		return;
@@ -557,6 +573,13 @@ static void sugov_update_shared(struct update_util_data *hook, u64 time,
 	raw_spin_unlock(&sg_policy->update_lock);
 }
 
+u64 walt_ktime_clock(void)
+{
+	if (unlikely(walt_ktime_suspended))
+		return ktime_to_ns(ktime_last);
+	return ktime_get_ns();
+}
+
 static void sugov_work(struct kthread_work *work)
 {
 	struct sugov_policy *sg_policy = container_of(work, struct sugov_policy, work);
@@ -565,7 +588,7 @@ static void sugov_work(struct kthread_work *work)
 	mutex_lock(&sg_policy->work_lock);
 	raw_spin_lock_irqsave(&sg_policy->update_lock, flags);
 	sugov_track_cycles(sg_policy, sg_policy->policy->cur,
-			   sched_ktime_clock());
+			   walt_ktime_clock());
 	raw_spin_unlock_irqrestore(&sg_policy->update_lock, flags);
 	__cpufreq_driver_target(sg_policy->policy, sg_policy->next_freq,
 				CPUFREQ_RELATION_L);
@@ -744,7 +767,10 @@ static struct kobj_type sugov_tunables_ktype = {
 
 /********************** cpufreq governor interface *********************/
 
-static struct cpufreq_governor Runutil_gov;
+#ifndef CPU_FREQ_DEFAULT_GOV_Runutil
+static
+#endif
+struct cpufreq_governor Runutil_gov;
 
 static struct sugov_policy *sugov_policy_alloc(struct cpufreq_policy *policy)
 {
@@ -882,6 +908,7 @@ static int sugov_init(struct cpufreq_policy *policy)
 	struct sugov_tunables *tunables;
 	unsigned int lat;
 	int ret = 0;
+    unsigned int walt_ravg_window;
 
 	/* State should be equivalent to EXIT */
 	if (policy->governor_data)
@@ -930,7 +957,7 @@ static int sugov_init(struct cpufreq_policy *policy)
 
 	policy->governor_data = sg_policy;
 	sg_policy->tunables = tunables;
-	stale_ns = sched_ravg_window + (sched_ravg_window >> 3);
+	stale_ns = walt_ravg_window + (walt_ravg_window >> 3);
 
 	sugov_tunables_restore(policy);
 
@@ -1043,7 +1070,7 @@ static void sugov_limits(struct cpufreq_policy *policy)
 		mutex_lock(&sg_policy->work_lock);
 		raw_spin_lock_irqsave(&sg_policy->update_lock, flags);
 		sugov_track_cycles(sg_policy, sg_policy->policy->cur,
-				   sched_ktime_clock());
+				   walt_ktime_clock());
 		raw_spin_unlock_irqrestore(&sg_policy->update_lock, flags);
 		cpufreq_policy_apply_limits(policy);
 		mutex_unlock(&sg_policy->work_lock);
