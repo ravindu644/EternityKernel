@@ -21,7 +21,9 @@
 #include "tune.h"
 #include "ems/ems.h"
 
-#define LATENCY_MULTIPLIER  (500)
+#include <trace/events/power.h>
+
+#define LATENCY_MULTIPLIER  (5000)
 #define SUGOV_KTHREAD_PRIORITY	50
 
 unsigned long
@@ -950,9 +952,6 @@ static int sugov_init(struct cpufreq_policy *policy)
 	tunables->rate_limit_us = LATENCY_MULTIPLIER;
 	tunables->hispeed_load = DEFAULT_HISPEED_LOAD;
 	tunables->hispeed_freq = 0;
-	lat = policy->cpuinfo.transition_latency / NSEC_PER_USEC;
-	if (lat)
-		tunables->rate_limit_us *= lat;
 
 	tunables->iowait_boost_enable = false;
 
@@ -1031,7 +1030,7 @@ static int sugov_start(struct cpufreq_policy *policy)
 		memset(sg_cpu, 0, sizeof(*sg_cpu));
 		sg_cpu->sg_policy = sg_policy;
 		sg_cpu->cpu = cpu;
-		sg_cpu->flags = SCHED_CPUFREQ_RT;
+		sg_cpu->flags = 0;
 		sg_cpu->iowait_boost_max = policy->cpuinfo.max_freq;
 	}
 
