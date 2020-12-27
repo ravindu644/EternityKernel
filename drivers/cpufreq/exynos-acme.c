@@ -1482,10 +1482,6 @@ static __init int init_domain(struct exynos_cpufreq_domain *domain,
 		// domain->min_freq = max(domain->min_freq, val);
 		domain->min_freq = val;
 
-	/* Default QoS for user */
-	if (!of_property_read_u32(dn, "user-default-qos", &val))
-		domain->user_default_qos = val;
-
 	/* If this domain has boost freq, change max */
 	val = exynos_pstate_get_boost_freq(cpumask_first(&domain->cpus));
 	if (val > domain->max_freq)
