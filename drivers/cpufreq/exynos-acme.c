@@ -597,18 +597,18 @@ static struct cpufreq_driver exynos_driver = {
 static bool enable_suspend_freqs = false;
 module_param(enable_suspend_freqs, bool, 0644);
 
-static unsigned int cpu0_suspend_min_freq = 351000;
-static unsigned int cpu0_suspend_max_freq = 806000;
+static unsigned int cpu0_suspend_min_freq = 0;
+static unsigned int cpu0_suspend_max_freq = 0;
 module_param(cpu0_suspend_min_freq, uint, 0644);
 module_param(cpu0_suspend_max_freq, uint, 0644);
 
-static unsigned int cpu4_suspend_min_freq = 377000;
-static unsigned int cpu4_suspend_max_freq = 754000;
+static unsigned int cpu4_suspend_min_freq = 0;
+static unsigned int cpu4_suspend_max_freq = 0;
 module_param(cpu4_suspend_min_freq, uint, 0644);
 module_param(cpu4_suspend_max_freq, uint, 0644);
 
-static unsigned int cpu6_suspend_min_freq = 520000;
-static unsigned int cpu6_suspend_max_freq = 728000;
+static unsigned int cpu6_suspend_min_freq = 0;
+static unsigned int cpu6_suspend_max_freq = 0;
 module_param(cpu6_suspend_min_freq, uint, 0644);
 module_param(cpu6_suspend_max_freq, uint, 0644);
 
@@ -644,7 +644,7 @@ void set_suspend_freqs(bool suspend)
 		cpu6_tmp_min_freq = policy6->min;
 		cpu6_tmp_max_freq = policy6->max;
 
-		if (!cpu0_suspend_min_freq && !cpu0_suspend_max_freq && !cpu6_suspend_min_freq && !cpu6_suspend_max_freq)
+		if (!cpu0_suspend_min_freq && !cpu0_suspend_max_freq)
 			goto cpu4;
 
 		if (!cpu0_suspend_min_freq)
@@ -661,7 +661,7 @@ void set_suspend_freqs(bool suspend)
 		cpufreq_update_freq(0, cpu0_set_suspend_min_freq, cpu0_set_suspend_max_freq);
 
 cpu4:
-		if (!cpu4_suspend_min_freq && !cpu4_suspend_max_freq && !cpu0_suspend_min_freq && !cpu0_suspend_max_freq)
+		if (!cpu4_suspend_min_freq && !cpu4_suspend_max_freq)
 			goto cpu6;
 
 		if (!cpu4_suspend_min_freq)
@@ -696,13 +696,12 @@ cpu6:
 
 out:
 		if (!cpu0_suspend_min_freq && !cpu0_suspend_max_freq && !cpu4_suspend_min_freq && !cpu4_suspend_max_freq && !cpu6_suspend_min_freq && !cpu6_suspend_max_freq)
-			update_freqs = false; // was false
+			update_freqs = false;
 		else
-			update_freqs = true; // was true
+			update_freqs = true;
 
 	} else {
 		/* resume */
-        update_freqs = true;
 		if (update_freqs) {
 			/* restore previous min/max cpu freq */
 			cpufreq_update_freq(0, cpu0_tmp_min_freq, cpu0_tmp_max_freq);

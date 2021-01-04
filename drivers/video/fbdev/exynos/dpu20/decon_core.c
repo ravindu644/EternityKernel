@@ -76,7 +76,7 @@ extern void set_suspend_freqs(bool);
 
 bool is_suspend = false;
 
-int decon_log_level = 0;
+int decon_log_level = 0;    /* default is 6 */
 module_param(decon_log_level, int, 0644);
 int dpu_bts_log_level = 6;
 module_param(dpu_bts_log_level, int, 0644);
