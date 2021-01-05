@@ -597,18 +597,18 @@ static struct cpufreq_driver exynos_driver = {
 static bool enable_suspend_freqs = false;
 module_param(enable_suspend_freqs, bool, 0644);
 
-static unsigned int cpu0_suspend_min_freq = 0;
-static unsigned int cpu0_suspend_max_freq = 0;
+static unsigned int cpu0_suspend_min_freq = 247000;
+static unsigned int cpu0_suspend_max_freq = 949000;
 module_param(cpu0_suspend_min_freq, uint, 0644);
 module_param(cpu0_suspend_max_freq, uint, 0644);
 
-static unsigned int cpu4_suspend_min_freq = 0;
-static unsigned int cpu4_suspend_max_freq = 0;
+static unsigned int cpu4_suspend_min_freq = 377000;
+static unsigned int cpu4_suspend_max_freq = 1066000;
 module_param(cpu4_suspend_min_freq, uint, 0644);
 module_param(cpu4_suspend_max_freq, uint, 0644);
 
-static unsigned int cpu6_suspend_min_freq = 0;
-static unsigned int cpu6_suspend_max_freq = 0;
+static unsigned int cpu6_suspend_min_freq = 520000;
+static unsigned int cpu6_suspend_max_freq = 1040000;
 module_param(cpu6_suspend_min_freq, uint, 0644);
 module_param(cpu6_suspend_max_freq, uint, 0644);
 
