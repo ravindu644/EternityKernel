@@ -40,7 +40,7 @@ DECLARE_KAIRISTICS(cpufreq, 32, 25, 24, 25);
 
 unsigned long boosted_cpu_util(int cpu, unsigned long other_util);
 /* KTHREAD PRIOR - default 50 */
-#define SUGOV_KTHREAD_PRIORITY 75
+#define SUGOV_KTHREAD_PRIORITY 50
 #define UP_RATE_LIMIT_US 4000
 #define DOWN_RATE_LIMIT_US 4000
 
@@ -435,7 +435,7 @@ skip_betting:
 static void sugov_get_util(unsigned long *util, unsigned long *max, int cpu)
 {
 	unsigned long max_cap, rt;
-    int t = 2;  // default is 2
+    int t = 1.8;  // default is 2
 
 	max_cap = arch_scale_cpu_capacity(NULL, cpu);
 
@@ -614,7 +614,7 @@ static void sugov_work(struct kthread_work *work)
 	down_write(&sg_policy->policy->rwsem);
 	mutex_lock(&sg_policy->work_lock);
 	__cpufreq_driver_target(sg_policy->policy, sg_policy->next_freq,
-				CPUFREQ_RELATION_C);    // default L, C and H
+				CPUFREQ_RELATION_L);    // default L, C and H
 	mutex_unlock(&sg_policy->work_lock);
 	up_write(&sg_policy->policy->rwsem);
 
@@ -1392,7 +1392,7 @@ static int sugov_pm_qos_callback(struct notifier_block *nb,
 		return NOTIFY_BAD;
 	}
 
-	cpufreq_driver_target(policy, next_freq, CPUFREQ_RELATION_C);   // default - L, C, H
+	cpufreq_driver_target(policy, next_freq, CPUFREQ_RELATION_L);   // default - L, C, H
 
 	cpufreq_cpu_put(policy);
 
