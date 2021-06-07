@@ -6,6 +6,8 @@
  */
 
 #include <linux/cpufreq.h>
+#include <linux/of.h>
+#include <linux/ems.h>
 #include <trace/events/ems.h>
 
 #include "../sched.h"
@@ -270,7 +272,6 @@ static int select_eco_cpu(struct eco_env *eenv)
 			continue;
 
 		cpumask_and(&mask, cpu_coregroup_mask(cpu), tsk_cpus_allowed(eenv->p));
-
 		if (cpumask_empty(&mask))
 			continue;
 
