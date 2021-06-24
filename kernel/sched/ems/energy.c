@@ -12,7 +12,6 @@
 
 #include "../sched.h"
 #include "ems.h"
-#include <linux/ems.h>
 
 /*
  * The compute capacity, power consumption at this compute capacity and
