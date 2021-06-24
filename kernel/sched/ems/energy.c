@@ -10,6 +10,7 @@
 
 #include "../sched.h"
 #include "ems.h"
+#include <linux/ems.h>
 
 /*
  * The compute capacity, power consumption at this compute capacity and
@@ -208,12 +209,11 @@ static int find_min_util_cpu(const struct cpumask *mask, struct task_struct *p)
 
 	/* Find energy efficient cpu in each coregroup. */
 	for_each_cpu_and(cpu, mask, cpu_active_mask) {
-		unsigned long capacity_orig = capacity_orig_of(cpu);
 		unsigned long util = ml_task_attached_cpu_util(cpu, p);
 		unsigned long new_util = ml_cpu_util_wake(cpu, p) + task_util(p);
 
 		/* Skip over-capacity cpu */
-		if (util >= capacity_orig)
+		if (lbt_util_bring_overutilize(cpu, util))
 			continue;
 
 		if (idle_cpu(cpu)) {
@@ -270,11 +270,7 @@ static int select_eco_cpu(struct eco_env *eenv)
 			continue;
 
 		cpumask_and(&mask, cpu_coregroup_mask(cpu), tsk_cpus_allowed(eenv->p));
-		/*
-		 * Checking prev cpu is meaningless, because the energy of prev cpu
-		 * will be compared to best cpu at last
-		 */
-		cpumask_clear_cpu(eenv->prev_cpu, &mask);
+
 		if (cpumask_empty(&mask))
 			continue;
 
@@ -293,8 +289,8 @@ static int select_eco_cpu(struct eco_env *eenv)
 		}
 	}
 
-	if (!cpu_selected(best_cpu))
-		return -1;
+	if (!cpu_selected(best_cpu) || best_cpu == eco_cpu)
+		return eco_cpu;
 
 	/*
 	 * Compare prev cpu to best cpu to determine whether keeping the task
