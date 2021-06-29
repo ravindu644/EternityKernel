@@ -41,8 +41,16 @@ DECLARE_KAIRISTICS(cpufreq, 32, 25, 24, 25);
 unsigned long boosted_cpu_util(int cpu, unsigned long other_util);
 /* KTHREAD PRIOR - default 50 */
 #define SUGOV_KTHREAD_PRIORITY 50
+
+/* UPD/DOWN_RATE_LIMIT_US for each one CPU cluster - little, mid and big - by XDA@nalas*/
 #define UP_RATE_LIMIT_US 4000
 #define DOWN_RATE_LIMIT_US 4000
+#define UP_RATE_LIMIT_US_LITTLE 4000
+#define DOWN_RATE_LIMIT_US_LITTLE 2000
+#define UP_RATE_LIMIT_US_MID 4000
+#define DOWN_RATE_LIMIT_US_MID 1500
+#define UP_RATE_LIMIT_US_BIG 4000
+#define DOWN_RATE_LIMIT_US_BIG 1500
 
 struct sugov_tunables {
 	struct gov_attr_set attr_set;
@@ -1009,8 +1017,22 @@ tunables_init:
 		goto stop_kthread;
 	}
 
-	tunables->up_rate_limit_us = UP_RATE_LIMIT_US;
-	tunables->down_rate_limit_us = DOWN_RATE_LIMIT_US;
+	    /* Set UP/DOWN_RATE_LIMITS_US depends on cluster LITTLE.big.MID  - XDA@nalas */
+		if (policy->cpu == 0) {
+            tunables->up_rate_limit_us = UP_RATE_LIMIT_US_LITTLE;
+            tunables->down_rate_limit_us = DOWN_RATE_LIMIT_US_LITTLE;
+	    	}
+		if (policy->cpu == 4) {
+            tunables->up_rate_limit_us = UP_RATE_LIMIT_US_MID;
+            tunables->down_rate_limit_us = DOWN_RATE_LIMIT_US_MID;
+	    	}
+		if (policy->cpu == 6) {
+            tunables->up_rate_limit_us = UP_RATE_LIMIT_US_BIG;
+            tunables->down_rate_limit_us = DOWN_RATE_LIMIT_US_BIG;
+	    	}
+
+	// tunables->up_rate_limit_us = UP_RATE_LIMIT_US;
+	// tunables->down_rate_limit_us = DOWN_RATE_LIMIT_US;
 	tunables->iowait_boost_enable = policy->iowait_boost_enable;
 #ifdef CONFIG_SCHED_KAIR_GLUE
 	tunables->fb_legacy = true;
