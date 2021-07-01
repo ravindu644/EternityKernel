@@ -443,7 +443,7 @@ skip_betting:
 static void sugov_get_util(unsigned long *util, unsigned long *max, int cpu)
 {
 	unsigned long max_cap, rt;
-    int t = 1.8;  // default is 2
+    int freq_ratio = 2.2;  // default is 2
 
 	max_cap = arch_scale_cpu_capacity(NULL, cpu);
 
@@ -455,7 +455,7 @@ static void sugov_get_util(unsigned long *util, unsigned long *max, int cpu)
 	*util = boosted_cpu_util(cpu, rt);
 #endif
 	*util = freqvar_boost_vector(cpu, *util);
-	*util = *util + (*util >> t);
+	*util = *util + (*util >> freq_ratio);
 	*util = min(*util, max_cap);
 	*max = max_cap;
 
