@@ -717,6 +717,7 @@ struct task_struct {
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
 	unsigned int			ptrace;
+	unsigned int            yield_count;
 
 #ifdef CONFIG_SMP
 	struct llist_node		wake_entry;
