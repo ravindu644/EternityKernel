@@ -18,6 +18,9 @@
 void __iomem *fvmap_base;
 void __iomem *sram_fvmap_base;
 
+static void __iomem *_map_base = NULL;
+static void __iomem *_sram_base = NULL;
+
 static int init_margin_table[MAX_MARGIN_ID];
 static int volt_offset_percent = 0;
 static int percent_margin_table[MAX_MARGIN_ID];
@@ -389,7 +392,116 @@ static const struct attribute_group percent_margin_group = {
 	.attrs = percent_margin_attrs,
 };
 
-static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base)
+ssize_t print_fvmap(char *buf)
+{
+	volatile struct fvmap_header *fvmap_header;
+	struct rate_volt_header *cur;
+	struct vclk *vclk;
+	int i, j;
+	ssize_t len = 0;
+
+	fvmap_header = _map_base;
+
+	for (i = 0; i < 5; i++) { /* Limit Print */
+		vclk = cmucal_get_node(ACPM_VCLK_TYPE | i);
+		if (vclk == NULL)
+			continue;
+		len += sprintf(buf + len, "dvfs_type : %s - id : %x\n",
+			vclk->name, fvmap_header[i].dvfs_type);
+		len += sprintf(buf + len, "  num_of_lv      : %d\n", fvmap_header[i].num_of_lv);
+		len += sprintf(buf + len, "  num_of_members : %d\n", fvmap_header[i].num_of_members);;
+
+		cur = _map_base + fvmap_header[i].o_ratevolt;
+
+		for (j = 0; j < fvmap_header[i].num_of_lv; j++) {
+			len += sprintf(buf + len, "  lv : [%7d], volt = %d uV\n",
+				cur->table[j].rate, cur->table[j].volt);
+		}
+	}
+
+	return len;
+}
+
+void update_fvmap(int id, int rate, int volt)
+{
+	struct fvmap_header *fvmap_header, *header;
+	struct rate_volt_header *old, *new;
+	struct clocks *clks;
+	struct pll_header *plls;
+	struct vclk *vclk;
+	struct cmucal_clk *clk_node;
+	unsigned int paddr_offset, fvaddr_offset;
+	int size, margin;
+	int i, j;
+
+	fvmap_header = _map_base;
+	header = _sram_base;
+
+	size = cmucal_get_list_size(ACPM_VCLK_TYPE);
+
+	for (i = 0; i < size; i++) {
+		/* load fvmap info */
+		fvmap_header[i].dvfs_type = header[i].dvfs_type;
+		fvmap_header[i].num_of_lv = header[i].num_of_lv;
+		fvmap_header[i].num_of_members = header[i].num_of_members;
+		fvmap_header[i].num_of_pll = header[i].num_of_pll;
+		fvmap_header[i].num_of_mux = header[i].num_of_mux;
+		fvmap_header[i].num_of_div = header[i].num_of_div;
+		fvmap_header[i].gearratio = header[i].gearratio;
+		fvmap_header[i].init_lv = header[i].init_lv;
+		fvmap_header[i].num_of_gate = header[i].num_of_gate;
+		fvmap_header[i].reserved[0] = header[i].reserved[0];
+		fvmap_header[i].reserved[1] = header[i].reserved[1];
+		fvmap_header[i].block_addr[0] = header[i].block_addr[0];
+		fvmap_header[i].block_addr[1] = header[i].block_addr[1];
+		fvmap_header[i].block_addr[2] = header[i].block_addr[2];
+		fvmap_header[i].o_members = header[i].o_members;
+		fvmap_header[i].o_ratevolt = header[i].o_ratevolt;
+		fvmap_header[i].o_tables = header[i].o_tables;
+
+		vclk = cmucal_get_node(ACPM_VCLK_TYPE | i);
+		if (vclk == NULL)
+			continue;
+
+		old = _sram_base + fvmap_header[i].o_ratevolt;
+		new = _map_base + fvmap_header[i].o_ratevolt;
+
+		check_percent_margin(old, fvmap_header[i].num_of_lv);
+
+		margin = init_margin_table[vclk->margin_id];
+		if (margin)
+			cal_dfs_set_volt_margin(i | ACPM_VCLK_TYPE, margin);
+
+		for (j = 0; j < fvmap_header[i].num_of_lv; j++) {
+
+			/* update voltage table */
+			if ((fvmap_header[i].dvfs_type == id) && (old->table[j].rate == rate))
+				old->table[j].volt = volt;
+
+			new->table[j].rate = old->table[j].rate;
+			new->table[j].volt = old->table[j].volt;
+		}
+
+		for (j = 0; j < fvmap_header[i].num_of_pll; j++) {
+			clks = _sram_base + fvmap_header[i].o_members;
+			plls = _sram_base + clks->addr[j];
+			clk_node = cmucal_get_node(vclk->list[j]);
+			if (clk_node == NULL)
+				continue;
+			paddr_offset = clk_node->paddr & 0xFFFF;
+			fvaddr_offset = plls->addr & 0xFFFF;
+			if (paddr_offset == fvaddr_offset)
+				continue;
+
+			clk_node->paddr += fvaddr_offset - paddr_offset;
+			clk_node->pll_con0 += fvaddr_offset - paddr_offset;
+			if (clk_node->pll_con1)
+				clk_node->pll_con1 += (unsigned long long)(fvaddr_offset - paddr_offset);
+		}
+	}
+}
+
+static void fvmap_copy_from_sram(void)
 {
 	struct fvmap_header *fvmap_header, *header;
 	struct rate_volt_header *old, *new;
@@ -402,8 +514,8 @@ static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base
 	int size, margin;
 	int i, j, k;
 
-	fvmap_header = map_base;
-	header = sram_base;
+	fvmap_header = _map_base;
+	header = _sram_base;
 
 	size = cmucal_get_list_size(ACPM_VCLK_TYPE);
 
@@ -435,8 +547,8 @@ static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base
 		pr_info("  num_of_lv      : %d\n", fvmap_header[i].num_of_lv);
 		pr_info("  num_of_members : %d\n", fvmap_header[i].num_of_members);
 
-		old = sram_base + fvmap_header[i].o_ratevolt;
-		new = map_base + fvmap_header[i].o_ratevolt;
+		old = _sram_base + fvmap_header[i].o_ratevolt;
+		new = _map_base + fvmap_header[i].o_ratevolt;
 
 		check_percent_margin(old, fvmap_header[i].num_of_lv);
 
@@ -445,10 +557,10 @@ static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base
 			cal_dfs_set_volt_margin(i | ACPM_VCLK_TYPE, margin);
 
 		for (j = 0; j < fvmap_header[i].num_of_members; j++) {
-			clks = sram_base + fvmap_header[i].o_members;
+			clks = _sram_base + fvmap_header[i].o_members;
 
 			if (j < fvmap_header[i].num_of_pll) {
-				plls = sram_base + clks->addr[j];
+				plls = _sram_base + clks->addr[j];
 				member_addr = plls->addr - 0x90000000;
 			} else {
 
@@ -471,6 +583,15 @@ static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base
 		}
 
 		for (j = 0; j < fvmap_header[i].num_of_lv; j++) {
+
+			/* add missing g3d voltages */
+			if ((strcmp(vclk->name, "dvfs_g3d") == 0) && (!old->table[j].volt))
+				old->table[j].volt = 800000;
+
+			/* add missing mif voltages */
+			if ((strcmp(vclk->name, "dvfs_mif") == 0) && (!old->table[j].volt))
+				old->table[j].volt = 800000;
+
 			new->table[j].rate = old->table[j].rate;
 			new->table[j].volt = old->table[j].volt;
 			pr_info("  lv : [%7d], volt = %d uV (%d %%) \n",
@@ -498,15 +619,15 @@ static void fvmap_copy_from_sram(void __iomem *map_base, void __iomem *sram_base
 
 int fvmap_init(void __iomem *sram_base)
 {
-	void __iomem *map_base;
 	struct kobject *kobj;
 
-	map_base = kzalloc(FVMAP_SIZE, GFP_KERNEL);
+	_sram_base = sram_base;
+	_map_base = kzalloc(FVMAP_SIZE, GFP_KERNEL);
 
-	fvmap_base = map_base;
+	fvmap_base = _map_base;
 	sram_fvmap_base = sram_base;
 	pr_info("%s:fvmap initialize %pK\n", __func__, sram_base);
-	fvmap_copy_from_sram(map_base, sram_base);
+	fvmap_copy_from_sram();
 
 	/* percent margin for each doamin at runtime */
 	kobj = kobject_create_and_add("percent_margin", power_kobj);

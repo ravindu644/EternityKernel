@@ -667,6 +667,24 @@ static ssize_t store_boost_mode_change(struct kobject *kobj, struct kobj_attribu
 	return count;
 }
 
+static ssize_t store_dvfs_table(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int id, rate, volt;
+
+	if (sscanf(buf, "%u %u %u", &id, &rate, &volt) == 3) {
+		update_fvmap(id, rate, volt);
+		pr_info("%s: updated DVFS id: %u - rate: %u kHz - volt: %u uV\n", __func__, id, rate, volt);
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static ssize_t show_dvfs_table(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	return print_fvmap(buf);
+}
+
 static struct kobj_attribute cpufreq_table =
 __ATTR(cpufreq_table, 0444 , show_cpufreq_table, NULL);
 static struct kobj_attribute cpufreq_min_limit =
@@ -686,6 +704,8 @@ __ATTR(cstate_control, 0644, show_cstate_control, store_cstate_control);
 static struct kobj_attribute boost_mode_change =
 __ATTR(boost_mode_change, 0644,
 		show_boost_mode_change, store_boost_mode_change);
+static struct kobj_attribute dvfs_table =
+    __ATTR(dvfs_table, 0644, show_dvfs_table, store_dvfs_table);
 
 static __init void init_sysfs(void)
 {
@@ -710,6 +730,8 @@ static __init void init_sysfs(void)
 	if (sysfs_create_file(power_kobj, &boost_mode_change.attr))
 		pr_err("failed to create boost_mode_change node\n");
 
+	if (sysfs_create_file(power_kobj, &dvfs_table.attr))
+		pr_err("failed to create boost_mode_change node\n");
 }
 
 static int parse_ufc_ctrl_info(struct exynos_cpufreq_domain *domain,
