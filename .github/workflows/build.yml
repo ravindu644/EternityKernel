@@ -67,5 +67,5 @@ jobs:
           draft: false
           prerelease: false
           token: ${{ secrets.TOKEN }}          
-          artifacts: "build/*.zip"
+          artifacts: "artifacts/**/*.zip"
           body: "Commit SHA: ${{ github.sha }}"
