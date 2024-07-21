@@ -76,7 +76,7 @@ FUNC_BUILD_KERNEL()
 
     make -j$BUILD_JOB_NUMBER ARCH=arm64 \
         CROSS_COMPILE=$BUILD_CROSS_COMPILE \
-        menuconfig || exit -1        
+        menuconfig || true      
 
     make -j$BUILD_JOB_NUMBER ARCH=arm64 \
         CROSS_COMPILE=$BUILD_CROSS_COMPILE || exit -1
