@@ -28,7 +28,7 @@ if [ -z "$LPOS_KERNEL_VERSION" ]; then
 fi
 
 #setting up localversion
-echo -e "CONFIG_LOCALVERSION_AUTO=n\nCONFIG_LOCALVERSION=\"-LPoS-x-Eternity-${LPOS_KERNEL_VERSION}\"\n" > "${WDIR}/arch/arm64/configs/version.config"
+echo -e "CONFIG_LOCALVERSION_AUTO=n\nCONFIG_LOCALVERSION=\"-LPoS-x-Eternity-${LPOS_KERNEL_VERSION}\"\n" > "${RDIR}/arch/arm64/configs/version.config"
 
 build_kernel() {
     local config=$1
