@@ -35,9 +35,9 @@ jobs:
       - name: Building LPoS
         run: |
           if [ "${{ matrix.su }}" == "non-ksu" ]; then
-            bash build.sh ${{ matrix.device }} -universal non-ksu
+            bash build.sh ${{ matrix.device }} non-ksu
           else
-            bash build.sh ${{ matrix.device }} -universal ksu
+            bash build.sh ${{ matrix.device }} ksu
           fi
 
       - name: Upload kernel
