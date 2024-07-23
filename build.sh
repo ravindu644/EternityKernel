@@ -1,7 +1,7 @@
 #!/bin/bash
 
 export MODEL=$1
-export piss=$2
+export KSU=$2
 export BUILD_CROSS_COMPILE=$(pwd)/toolchains/aarch64-linux-android-4.9/bin/aarch64-linux-androidkernel-
 export BUILD_JOB_NUMBER=`grep -c ^processor /proc/cpuinfo`
 RDIR=$(pwd)
@@ -88,6 +88,34 @@ FUNC_BUILD_KERNEL()
     echo " Finished kernel build"
 }
 
+FUNC_BUILD_KERNEL_KSU()
+{
+    echo " Starting a KSU kernel build using "$KERNEL_DEFCONFIG ""
+    # No this is not a typo, samsung left it this way on 12
+    export PLATFORM_VERSION=11
+    export ANDROID_MAJOR_VERSION=r
+    
+    rm -r drivers/misc/tzdev
+    cp -r BTStzdev drivers/misc/tzdev
+
+    make -j$BUILD_JOB_NUMBER ARCH=arm64 \
+        CROSS_COMPILE=$BUILD_CROSS_COMPILE \
+        $KERNEL_DEFCONFIG eternity.config ksu.config || exit -1
+
+    make -j$BUILD_JOB_NUMBER ARCH=arm64 \
+        CROSS_COMPILE=$BUILD_CROSS_COMPILE \
+        menuconfig || true      
+
+    make -j$BUILD_JOB_NUMBER ARCH=arm64 \
+        CROSS_COMPILE=$BUILD_CROSS_COMPILE || exit -1
+
+    $RDIR/toolchains/mkdtimg cfg_create build/dtb_$SOC.img \
+        $RDIR/toolchains/configs/exynos$SOC.cfg \
+        -d $RDIR/arch/arm64/boot/dts/exynos
+
+    echo " Finished kernel build"
+}
+
 FUNC_BUILD_RAMDISK()
 {
     rm -f $RDIR/ramdisk/split_img/boot.img-kernel
@@ -134,7 +162,15 @@ rm -rf ./build.log
 (
 	START_TIME=`date +%s`
 
-	FUNC_BUILD_KERNEL
+	
+    if [ "$KSU" = "non-ksu" ]; then
+        FUNC_BUILD_KERNEL
+    elif [ "$KSU" = "ksu" ]; then
+        FUNC_BUILD_KERNEL_KSU
+    else
+        echo "Error: Invalid input. Please enter 'ksu' or 'non-ksu' as the 2nd parameter"
+        exit 1
+    fi
 	FUNC_BUILD_RAMDISK
 	FUNC_BUILD_ZIP
 
