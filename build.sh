@@ -35,8 +35,6 @@ build_kernel() {
     echo "Starting a kernel build using $KERNEL_DEFCONFIG"
     export PLATFORM_VERSION=11
     export ANDROID_MAJOR_VERSION=r
-    rm -r drivers/misc/tzdev
-    cp -r BTStzdev drivers/misc/tzdev
 
     make -j$BUILD_JOB_NUMBER ARCH=arm64 CROSS_COMPILE=$BUILD_CROSS_COMPILE $KERNEL_DEFCONFIG $config || exit -1
     make -j$BUILD_JOB_NUMBER ARCH=arm64 CROSS_COMPILE=$BUILD_CROSS_COMPILE menuconfig || true
