@@ -22,6 +22,14 @@ else
     read KERNEL_DEFCONFIG SOC BOARD <<< "${DEVICES[beyond2lte]}"
 fi
 
+#dev
+if [ -z "$LPOS_KERNEL_VERSION" ]; then
+    export LPOS_KERNEL_VERSION="dev"
+fi
+
+#setting up localversion
+echo -e "CONFIG_LOCALVERSION_AUTO=n\nCONFIG_LOCALVERSION=\"-LPoS-x-Eternity-${LPOS_KERNEL_VERSION}\"\n" > "${WDIR}/arch/arm64/configs/version.config"
+
 build_kernel() {
     local config=$1
     echo "Starting a kernel build using $KERNEL_DEFCONFIG"
