@@ -26,6 +26,7 @@
 #include "tune.h"
 
 unsigned long boosted_cpu_util(int cpu);
+extern struct cpufreq_governor blu_schedutil_gov;
 
 /* Stub out fast switch routines present on mainline to reduce the backport
  * overhead. */
@@ -670,7 +671,6 @@ static int sugov_init(struct cpufreq_policy *policy)
 {
 	struct sugov_policy *sg_policy;
 	struct sugov_tunables *tunables;
-	unsigned int lat;
 	int ret = 0;
 
 	/* State should be equivalent to EXIT */
@@ -829,7 +829,7 @@ static void sugov_limits(struct cpufreq_policy *policy)
 	sg_policy->need_freq_update = true;
 }
 
-static struct cpufreq_governor blu_schedutil_gov = {
+struct cpufreq_governor blu_schedutil_gov = {
 	.name = "blu_schedutil",
 	.owner = THIS_MODULE,
 	.init = sugov_init,
