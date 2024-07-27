@@ -7,7 +7,7 @@ export KBUILD_BUILD_USER="@ravindu644"
 #proton-12
 if [ ! -d "${RDIR}/proton" ]; then
     mkdir -p "${RDIR}/proton"
-    git clone --depth=1 https://github.com/ravindu644/proton-12.git -b master proton
+    git clone --depth=1 https://github.com/ravindu644/proton-12.git -b main --single-branch proton
 fi
 
 export PATH=${PATH}:${RDIR}/proton/bin
@@ -22,6 +22,7 @@ CLANG_TRIPLE=aarch64-linux-gnu-
 AR=llvm-ar
 NM=llvm-nm
 AS=llvm-as
+READELF=llvm-readelf
 OBJCOPY=llvm-objcopy
 OBJDUMP=llvm-objdump
 OBJSIZE=llvm-size
@@ -30,7 +31,6 @@ LLVM_AR=llvm-ar
 LLVM_DIS=llvm-dis
 LLVM_NM=llvm-nm
 LLVM=1
-READELF=llvm-readelf
 "
 #symlinking python2
 if [ ! -f "$HOME/python" ]; then
