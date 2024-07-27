@@ -10,7 +10,7 @@ if [ ! -d "${RDIR}/proton" ]; then
     git clone --depth=1 https://github.com/ravindu644/proton-12.git -b main --single-branch proton
 fi
 
-export PATH=${PATH}:${RDIR}/proton/bin
+export PATH=$PWD/proton/bin:$PATH
 export LLVM=1
 export ARGS="
 CC=clang
