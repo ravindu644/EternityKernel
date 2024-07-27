@@ -11,7 +11,6 @@ if [ ! -d "${RDIR}/proton" ]; then
 fi
 
 export PATH=${PATH}:${RDIR}/proton/bin
-export READELF=${RDIR}/proton/bin/aarch64-linux-gnu-readelf #fix for stupid No such file or directory
 export LLVM=1
 export ARGS="
 CC=clang
@@ -31,6 +30,7 @@ LLVM_AR=llvm-ar
 LLVM_DIS=llvm-dis
 LLVM_NM=llvm-nm
 LLVM=1
+READELF=llvm-readelf
 "
 #symlinking python2
 if [ ! -f "$HOME/python" ]; then
