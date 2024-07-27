@@ -11,6 +11,7 @@ if [ ! -d "${RDIR}/proton" ]; then
 fi
 
 export PATH=$PWD/proton/bin:$PATH
+export READELF=$PWD/proton/bin/aarch64-linux-gnu-readelf
 export LLVM=1
 export ARGS="
 CC=clang
@@ -22,7 +23,6 @@ CLANG_TRIPLE=aarch64-linux-gnu-
 AR=llvm-ar
 NM=llvm-nm
 AS=llvm-as
-READELF=llvm-readelf
 OBJCOPY=llvm-objcopy
 OBJDUMP=llvm-objdump
 OBJSIZE=llvm-size
