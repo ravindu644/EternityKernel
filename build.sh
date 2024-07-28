@@ -10,7 +10,7 @@ if [ ! -d "${RDIR}/proton" ]; then
     git clone --depth=1 https://github.com/ravindu644/proton-12.git -b main --single-branch proton
 fi
 
-export PATH=$PWD/proton/bin:$PATH
+export PATH=$PWD/proton/bin:$HOME:$PATH
 export READELF=$PWD/proton/bin/aarch64-linux-gnu-readelf
 export LLVM=1
 export ARGS="
@@ -108,9 +108,10 @@ build_zip() {
 }
 
 copy_modules(){
-    if [ ! -d "${RDIR}/modules" ]; then
-    mkdir -p "${RDIR}/modules"
+    if [ -d "${RDIR}/modules" ]; then
+        rm -rf "${RDIR}/modules"
     fi
+    mkdir -p "${RDIR}/modules"
     cd "${RDIR}"
     find . -type f -name "*.ko" -exec cp -n {} modules \;
     echo "Module files copied to the 'modules' folder."
