@@ -59,11 +59,11 @@ if [ -z "$LPOS_KERNEL_VERSION" ]; then
 fi
 
 #setting up localversion
-echo -e "CONFIG_LOCALVERSION_AUTO=n\nCONFIG_LOCALVERSION=\"-LPoS-x-Eternity-${LPOS_KERNEL_VERSION}\"\n" > "${RDIR}/arch/arm64/configs/version.config"
+echo -e "CONFIG_LOCALVERSION_AUTO=n\nCONFIG_LOCALVERSION=\"-Nethunter-LPoS-${LPOS_KERNEL_VERSION}\"\n" > "${RDIR}/arch/arm64/configs/version.config"
 
 build_kernel() {
     local config=$1
-    echo "Starting a kernel build using $KERNEL_DEFCONFIG"
+    echo "Starting a Nethunter kernel build using $KERNEL_DEFCONFIG"
     export PLATFORM_VERSION=11
     export ANDROID_MAJOR_VERSION=r
 
@@ -104,9 +104,22 @@ build_zip() {
     cp $RDIR/toolchains/updater-script $RDIR/build/zip/META-INF/com/google/android/
     cp $RDIR/toolchains/update-binary $RDIR/build/zip/META-INF/com/google/android/
     cd $RDIR/build/zip
-    zip -r ../LPoS-x-Eternity-${LPOS_KERNEL_VERSION}-${MODEL}-${KSU}-universal.zip .
+    zip -r ../Nethunter-LPoS-${LPOS_KERNEL_VERSION}-${MODEL}-${KSU}-universal.zip .
     rm -rf $RDIR/build/zip
     cd $RDIR/build
+}
+
+copy_modules(){
+    if [ ! -d "${RDIR}/modules" ]; then
+    mkdir -p "${RDIR}/modules"
+    fi
+    cd "${RDIR}"
+    find . -type f -name "*.ko" -exec cp -n {} modules \;
+    echo "Module files copied to the 'modules' folder."
+    cp "${RDIR}/modules"/* "${RDIR}/nh_lkm/system/vendor/lib/modules/"
+    cd "${RDIR}/nh_lkm" ; zip -r "Kali Nethunter Drivers - Galaxy S10x [MAGISK].zip" .
+    mv "Kali Nethunter Drivers - Galaxy S10x [MAGISK].zip" "${RDIR}/build"
+    cd "${RDIR}"
 }
 
 # Main execution
@@ -116,15 +129,15 @@ rm -rf ./build.log
 
     if [ "$KSU" = "non-ksu" ]; then
         echo "CONFIG_KSU=n" > "${RDIR}/arch/arm64/configs/ksu.config"
-        build_kernel "eternity.config ksu.config version.config"
+        build_kernel "eternity.config ksu.config version.config nethunter.config"
     elif [ "$KSU" = "ksu" ]; then
         echo "CONFIG_KSU=y" > "${RDIR}/arch/arm64/configs/ksu.config"
-        build_kernel "eternity.config ksu.config version.config"
+        build_kernel "eternity.config ksu.config version.config nethunter.config"
     else
         echo "Error: Invalid input. Please enter 'ksu' or 'non-ksu' as the 2nd parameter"
         exit 1
     fi
-
+    copy_modules
     build_ramdisk
     build_zip
 

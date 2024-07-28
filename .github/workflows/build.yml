@@ -34,7 +34,7 @@ jobs:
         run: |
           echo "LPOS_KERNEL_VERSION=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
           
-      - name: Building LPoS
+      - name: Building LPoS+NH
         run: |
           if [ "${{ matrix.su }}" == "non-ksu" ]; then
             bash build.sh ${{ matrix.device }} non-ksu
@@ -45,9 +45,18 @@ jobs:
       - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
-          name: "LPoS-${{ env.LPOS_KERNEL_VERSION }}-${{ matrix.device }}-${{ matrix.su }}-universal"
+          name: "Nethunter-LPoS-${{ env.LPOS_KERNEL_VERSION }}-${{ matrix.device }}-${{ matrix.su }}-universal"
           path: |
             build/*.zip
+
+      # Add this step to upload the universal zip file
+      - name: Upload universal Kali Nethunter Drivers
+        uses: actions/upload-artifact@v4
+        with:
+          name: "Kali-Nethunter-Drivers"
+          path: "build/Kali Nethunter Drivers - Galaxy S10x [MAGISK].zip"
+        # Only run this step once to avoid duplicates
+        if: matrix.device == 'beyond2lte' && matrix.su == 'non-ksu'
 
   release:
     needs: build
@@ -64,10 +73,12 @@ jobs:
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
-          tag: ${{ github.event.inputs.tag }}
-          name: "LPoS-x-Eternity-${{ github.event.inputs.tag }}"
+          tag: "nh-${{ github.event.inputs.tag }}"
+          name: "Nethunter-LPoS-${{ github.event.inputs.tag }}"
           draft: false
           prerelease: false
           token: ${{ secrets.TOKEN }}          
-          artifacts: "artifacts/**/*.zip"
+          artifacts: |
+            artifacts/**/*.zip
+            artifacts/Kali-Nethunter-Drivers/Kali Nethunter Drivers - Galaxy S10x [MAGISK].zip
           body: "Commit SHA: ${{ github.sha }}"

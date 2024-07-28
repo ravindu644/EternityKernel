@@ -1,0 +1,6 @@
+id=loadmodules
+name=Kali Nethunter Drivers - Galaxy S10x
+version=v2
+versionCode=200
+author=@ravindu644
+description=Loadable Kali Nethunter Kernel Modules for Nethunter-LPoS Kernel.
