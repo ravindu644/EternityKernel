@@ -115,6 +115,7 @@ copy_modules(){
     find . -type f -name "*.ko" -exec cp -n {} modules \;
     echo "Module files copied to the 'modules' folder."
     cp "${RDIR}/modules"/* "${RDIR}/nh_lkm/system/vendor/lib/modules/"
+    rm -f "${RDIR}/nh_lkm/system/vendor/lib/modules/.placeholder" ; rm -f "${RDIR}/nh_lkm/system/lib/modules/.placeholder"
     cd "${RDIR}/nh_lkm" ; zip -r "Kali Nethunter Drivers - Galaxy S10x [MAGISK].zip" .
     mv "Kali Nethunter Drivers - Galaxy S10x [MAGISK].zip" "${RDIR}/build"
     cd "${RDIR}"
