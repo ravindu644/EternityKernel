@@ -54,7 +54,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: "Kali-Nethunter-Drivers"
-          path: "build/Kali Nethunter Drivers - Galaxy S10x [MAGISK].zip"
+          path: "build/Kali Nethunter Additional Drivers - Galaxy S10x [MAGISK].zip"
         # Only run this step once to avoid duplicates
         if: matrix.device == 'beyond2lte' && matrix.su == 'non-ksu'
 
@@ -80,5 +80,5 @@ jobs:
           token: ${{ secrets.TOKEN }}          
           artifacts: |
             artifacts/**/*.zip
-            artifacts/Kali-Nethunter-Drivers/Kali Nethunter Drivers - Galaxy S10x [MAGISK].zip
+            artifacts/Kali-Nethunter-Drivers/Kali Nethunter Additional Drivers - Galaxy S10x [MAGISK].zip
           body: "Commit SHA: ${{ github.sha }}"
