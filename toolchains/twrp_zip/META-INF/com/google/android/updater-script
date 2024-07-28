@@ -9,7 +9,7 @@ setdefault devices off
 
 ui_print " "
 ui_print "*******************************"
-ui_print "*      - LPoS Kernel -        *"
+ui_print "*    - LPoS + NH Kernel -     *"
 ui_print "*       TWRP Installer        *"
 ui_print "*      by @ravindu644         *"
 ui_print "*******************************"
