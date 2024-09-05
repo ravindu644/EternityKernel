@@ -10,12 +10,9 @@
 #include "../sched.h"
 #include "../tune.h"
 #include "ems.h"
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/ems.h>
-
-#include "ems.h"
-#include "../sched.h"
-#include "../tune.h"
 
 unsigned long cpu_util(int cpu)
 {
