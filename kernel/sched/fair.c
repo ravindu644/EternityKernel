@@ -2616,7 +2616,7 @@ void task_numa_work(struct callback_head *work)
 		 * Skip inaccessible VMAs to avoid any confusion between
 		 * PROT_NONE and NUMA hinting ptes
 		 */
-		if (!(vma->vm_flags & (VM_READ | VM_EXEC | VM_WRITE)))
+		if (!vma_is_accessible(vma))
 			continue;
 
 		do {
@@ -3704,8 +3704,33 @@ static inline unsigned long cfs_rq_load_avg(struct cfs_rq *cfs_rq)
 
 static int idle_balance(struct rq *this_rq, struct rq_flags *rf);
 
+static inline int task_fits_capacity(struct task_struct *p, long capacity);
+
+static inline void update_misfit_status(struct task_struct *p, struct rq *rq)
+{
+	if (!static_branch_unlikely(&sched_asym_cpucapacity))
+		return;
+
+	if (!p) {
+		rq->misfit_task_load = 0;
+		return;
+	}
+
+	if (task_fits_capacity(p, capacity_of(cpu_of(rq)))) {
+		rq->misfit_task_load = 0;
+		return;
+	}
+
+	rq->misfit_task_load = task_h_load(p);
+}
+
 static inline unsigned long task_util(struct task_struct *p)
 {
+#ifdef CONFIG_SCHED_WALT
+	if (likely(!walt_disabled && sysctl_sched_use_walt_task_util))
+		return (p->ravg.demand /
+			(walt_ravg_window >> SCHED_CAPACITY_SHIFT));
+#endif
 	return READ_ONCE(p->se.avg.util_avg);
 }
 
@@ -3718,6 +3743,11 @@ static inline unsigned long _task_util_est(struct task_struct *p)
 
 static inline unsigned long task_util_est(struct task_struct *p)
 {
+#ifdef CONFIG_SCHED_WALT
+	if (likely(!walt_disabled && sysctl_sched_use_walt_task_util))
+		return (p->ravg.demand /
+			(walt_ravg_window >> SCHED_CAPACITY_SHIFT));
+#endif
 	return max(task_util(p), _task_util_est(p));
 }
 
@@ -3731,8 +3761,11 @@ static inline void util_est_enqueue(struct cfs_rq *cfs_rq,
 
 	/* Update root cfs_rq's estimated utilization */
 	enqueued  = cfs_rq->avg.util_est.enqueued;
-	enqueued += _task_util_est(p);
+	enqueued += (_task_util_est(p) | UTIL_AVG_UNCHANGED);
 	WRITE_ONCE(cfs_rq->avg.util_est.enqueued, enqueued);
+
+	trace_sched_util_est_task(p, &p->se.avg);
+	trace_sched_util_est_cpu(cpu_of(rq_of(cfs_rq)), cfs_rq);
 }
 
 /*
@@ -3757,19 +3790,13 @@ util_est_dequeue(struct cfs_rq *cfs_rq, struct task_struct *p, bool task_sleep)
 	if (!sched_feat(UTIL_EST))
 		return;
 
-	/*
-	 * Update root cfs_rq's estimated utilization
-	 *
-	 * If *p is the last task then the root cfs_rq's estimated utilization
-	 * of a CPU is 0 by definition.
-	 */
-	ue.enqueued = 0;
-	if (cfs_rq->nr_running) {
-		ue.enqueued  = cfs_rq->avg.util_est.enqueued;
-		ue.enqueued -= min_t(unsigned int, ue.enqueued,
-				     _task_util_est(p));
-	}
+	/* Update root cfs_rq's estimated utilization */
+	ue.enqueued  = cfs_rq->avg.util_est.enqueued;
+	ue.enqueued -= min_t(unsigned int, ue.enqueued,
+			     (_task_util_est(p) | UTIL_AVG_UNCHANGED));
 	WRITE_ONCE(cfs_rq->avg.util_est.enqueued, ue.enqueued);
+
+	trace_sched_util_est_cpu(cpu_of(rq_of(cfs_rq)), cfs_rq);
 
 	/*
 	 * Skip update of task's estimated utilization when the task has not
@@ -3828,6 +3855,8 @@ util_est_dequeue(struct cfs_rq *cfs_rq, struct task_struct *p, bool task_sleep)
 	ue.ewma >>= UTIL_EST_WEIGHT_SHIFT;
 done:
 	WRITE_ONCE(p->se.avg.util_est, ue);
+
+	trace_sched_util_est_task(p, &p->se.avg);
 }
 
 #else /* CONFIG_SMP */
@@ -3866,6 +3895,8 @@ static inline int idle_balance(struct rq *rq, struct rq_flags *rf)
 {
 	return 0;
 }
+
+static inline void update_misfit_status(struct task_struct *p, struct rq *rq) {}
 
 static inline void
 util_est_enqueue(struct cfs_rq *cfs_rq, struct task_struct *p) {}
@@ -5324,7 +5355,6 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		walt_inc_cumulative_runnable_avg(rq, p);
 	}
 
-	util_est_enqueue(&rq->cfs, p);
 	hrtick_update(rq);
 }
 
@@ -5405,6 +5435,7 @@ static void dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		rq->next_balance = jiffies;
 
 	util_est_dequeue(&rq->cfs, p, task_sleep);
+	dequeue_multi_load(&rq->cfs, p, task_sleep);
 	hrtick_update(rq);
 }
 
@@ -6654,7 +6685,16 @@ boosted_cpu_util(int cpu, unsigned long other_util)
 	return util + margin;
 }
 
-static unsigned long cpu_util_wake(int cpu, struct task_struct *p);
+unsigned long
+boosted_task_util(struct task_struct *task)
+{
+	unsigned long util = task_util_est(task);
+	long margin = schedtune_task_margin(task);
+
+	trace_sched_boost_task(task, util, margin);
+
+	return util + margin;
+}
 
 static unsigned long capacity_spare_wake(int cpu, struct task_struct *p)
 {
@@ -7538,14 +7578,55 @@ int find_best_target(struct task_struct *p, int *backup_cpu,
 
 	} while (sg = sg->next, sg != sd->groups);
 
-	/* Task has no contribution or is new */
-	if (cpu != task_cpu(p) || !p->se.avg.last_update_time)
-		return cpu_util(cpu);
+	/*
+	 * For non latency sensitive tasks, cases B and C in the previous loop,
+	 * we pick the best IDLE CPU only if we was not able to find a target
+	 * ACTIVE CPU.
+	 *
+	 * Policies priorities:
+	 *
+	 * - prefer_idle tasks:
+	 *
+	 *   a) IDLE CPU available: best_idle_cpu
+	 *   b) ACTIVE CPU where task fits and has the bigger maximum spare
+	 *      capacity (i.e. target_cpu)
+	 *   c) ACTIVE CPU with less contention due to other tasks
+	 *      (i.e. best_active_cpu)
+	 *
+	 * - NON prefer_idle tasks:
+	 *
+	 *   a) ACTIVE CPU: target_cpu
+	 *   b) IDLE CPU: best_idle_cpu
+	 */
 
-	capacity = capacity_orig_of(cpu);
-	util = max_t(long, cpu_rq(cpu)->cfs.avg.util_avg - task_util(p), 0);
+	if (prefer_idle && (best_idle_cpu != -1)) {
+		trace_sched_find_best_target(p, prefer_idle, min_util, cpu,
+					     best_idle_cpu, best_active_cpu,
+					     best_idle_cpu);
 
-	return (util >= capacity) ? capacity : util;
+		return best_idle_cpu;
+	}
+
+	if (target_cpu == -1)
+		target_cpu = prefer_idle
+			? best_active_cpu
+			: best_idle_cpu;
+	else
+		*backup_cpu = prefer_idle
+		? best_active_cpu
+		: best_idle_cpu;
+
+	trace_sched_find_best_target(p, prefer_idle, min_util, cpu,
+				     best_idle_cpu, best_active_cpu,
+				     target_cpu);
+
+	/* it is possible for target and backup
+	 * to select same CPU - if so, drop backup
+	 */
+	if (*backup_cpu == target_cpu)
+		*backup_cpu = -1;
+
+	return target_cpu;
 }
 
 static bool cpu_overutilized(int cpu)
@@ -10343,7 +10424,6 @@ static int need_active_balance(struct lb_env *env)
 	 * available on dst_cpu.
 	 */
 	if ((env->idle != CPU_NOT_IDLE) &&
-	    (env->src_grp_nr_running == 1) &&
 	    (env->src_rq->cfs.h_nr_running == 1)) {
 		if ((check_cpu_capacity(env->src_rq, sd)) &&
 		    (capacity_of(env->src_cpu)*sd->imbalance_pct < capacity_of(env->dst_cpu)*100))
@@ -10352,7 +10432,6 @@ static int need_active_balance(struct lb_env *env)
 
 	if ((capacity_of(env->src_cpu) < capacity_of(env->dst_cpu)) &&
 	    ((capacity_orig_of(env->src_cpu) < capacity_orig_of(env->dst_cpu))) &&
-				(env->src_grp_nr_running == 1) &&
 				env->src_rq->cfs.h_nr_running == 1 &&
 				cpu_overutilized(env->src_cpu) &&
 				!cpu_overutilized(env->dst_cpu)) {
