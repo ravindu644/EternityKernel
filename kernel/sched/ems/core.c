@@ -7,41 +7,12 @@
 
 #include <linux/ems.h>
 
+#include "ems.h"
 #include "../sched.h"
 #include "../tune.h"
-#include "ems.h"
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/ems.h>
-
-#include "ems.h"
-#include "../sched.h"
-#include "../tune.h"
-
-unsigned long cpu_util(int cpu)
-{
-	struct cfs_rq *cfs_rq;
-	unsigned int util;
-
-#ifdef CONFIG_SCHED_WALT
-	if (likely(!walt_disabled && sysctl_sched_use_walt_cpu_util)) {
-		u64 walt_cpu_util = cpu_rq(cpu)->cumulative_runnable_avg;
-
-		walt_cpu_util <<= SCHED_CAPACITY_SHIFT;
-		do_div(walt_cpu_util, walt_ravg_window);
-
-		return min_t(unsigned long, walt_cpu_util,
-			     capacity_orig_of(cpu));
-	}
-#endif
-
-	cfs_rq = &cpu_rq(cpu)->cfs;
-	util = READ_ONCE(cfs_rq->avg.util_avg);
-
-	if (sched_feat(UTIL_EST))
-		util = max(util, READ_ONCE(cfs_rq->avg.util_est.enqueued));
-
-	return min_t(unsigned long, util, capacity_orig_of(cpu));
-}
 
 unsigned long task_util(struct task_struct *p)
 {
@@ -266,33 +237,77 @@ out:
 	return target_cpu;
 }
 
-const struct cpumask *cpu_slowest_mask(void)
+static ssize_t show_eff_mode(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
 {
-	return &slowest_mask;
+	int ret = 0;
+
+	ret += snprintf(buf + ret, 10, "%d\n", eff_mode);
+
+	return ret;
 }
 
-const struct cpumask *cpu_fastest_mask(void)
+static ssize_t store_eff_mode(struct kobject *kobj,
+		struct kobj_attribute *attr, const char *buf,
+		size_t count)
 {
-	return &fastest_mask;
+	unsigned int input;
+
+	if (!sscanf(buf, "%d", &input))
+		return -EINVAL;
+
+	eff_mode = input;
+
+	return count;
 }
 
-static void cpumask_speed_init(void)
+static struct kobj_attribute eff_mode_attr =
+__ATTR(eff_mode, 0644, show_eff_mode, store_eff_mode);
+
+static ssize_t show_sched_topology(struct kobject *kobj,
+		struct kobj_attribute *attr, char *buf)
 {
-	cpumask_clear(&slowest_mask);
-	cpumask_clear(&fastest_mask);
-	cpumask_copy(&slowest_mask, cpu_coregroup_mask(0));
-	cpumask_copy(&fastest_mask, cpu_coregroup_mask(4));
+	int cpu;
+	struct sched_domain *sd;
+	int ret = 0;
+
+	rcu_read_lock();
+	for_each_possible_cpu(cpu) {
+		int sched_domain_level = 0;
+
+		sd = rcu_dereference_check_sched_domain(cpu_rq(cpu)->sd);
+		while (sd->parent) {
+			sched_domain_level++;
+			sd = sd->parent;
+		}
+
+		for_each_lower_domain(sd) {
+			ret += snprintf(buf + ret, 50,
+				"[lv%d] cpu%d: sd->span=%#x sg->span=%#x\n",
+				sched_domain_level, cpu,
+				*(unsigned int *)cpumask_bits(sched_domain_span(sd)),
+				*(unsigned int *)cpumask_bits(sched_group_span(sd->groups)));
+			sched_domain_level--;
+		}
+		ret += snprintf(buf + ret,
+			50, "----------------------------------------\n");
+	}
+	rcu_read_unlock();
+
+	return ret;
 }
+
+static struct kobj_attribute sched_topology_attr =
+__ATTR(sched_topology, 0444, show_sched_topology, NULL);
 
 struct kobject *ems_kobj;
 
 static int __init init_sysfs(void)
 {
-	cpumask_speed_init();
 	ems_kobj = kobject_create_and_add("ems", kernel_kobj);
 
-	lb_env = alloc_percpu(struct lb_env);
-	lb_work = alloc_percpu(struct cpu_stop_work);
+	sysfs_create_file(ems_kobj, &sched_topology_attr.attr);
+	sysfs_create_file(ems_kobj, &eff_mode_attr.attr);
 
 	return 0;
 }
