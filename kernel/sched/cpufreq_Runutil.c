@@ -23,7 +23,7 @@
 
 #include <trace/events/power.h>
 
-#define LATENCY_MULTIPLIER  (5000)
+#define LATENCY_MULTIPLIER  (4000)
 #define SUGOV_KTHREAD_PRIORITY	50
 
 unsigned long
