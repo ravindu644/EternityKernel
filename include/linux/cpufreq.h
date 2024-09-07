@@ -589,7 +589,6 @@ struct governor_attr {
 int cpufreq_update_freq(int cpu, unsigned int min, unsigned int max);
 
 static inline bool cpufreq_can_do_remote_dvfs(struct cpufreq_policy *policy)
-{
 	/*
 	 * Allow remote callbacks if:
 	 * - dvfs_possible_from_any_cpu flag is set
