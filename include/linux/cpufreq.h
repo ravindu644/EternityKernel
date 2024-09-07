@@ -552,7 +552,7 @@ struct cpufreq_governor *cpufreq_fallback_governor(void);
 #if defined (CONFIG_ARM_EXYNOS_FF)
 void cpufreq_policy_apply_limits(struct cpufreq_policy *policy);
 #else
-static inline void cpufreq_policy_apply_limits(struct cpufreq_policy *policy)
+static inline bool cpufreq_can_do_remote_dvfs(struct cpufreq_policy *policy)
 {
 	if (policy->max < policy->cur)
 		__cpufreq_driver_target(policy, policy->max, CPUFREQ_RELATION_H);
