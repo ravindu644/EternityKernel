@@ -1114,8 +1114,6 @@ __ATTR(freqvar_idlelatency, S_IRUGO | S_IWUSR,
 /*********************************************************************
  *                  INITIALIZE EXYNOS CPUFREQ DRIVER                 *
  *********************************************************************/
-static int cpu_undervolt = 35000;
-
 static void print_domain_info(struct exynos_cpufreq_domain *domain)
 {
 	int i;
@@ -1153,32 +1151,11 @@ static void print_domain_info(struct exynos_cpufreq_domain *domain)
 	}
 }
 
-static ssize_t store_cpu_table_undervolt(struct kobject *kobj, struct kobj_attribute *attr,
-					const char *buf, size_t count)
+static __init void init_sysfs(void)
 {
-	int input;
+	if (sysfs_create_file(power_kobj, &freqvar_idlelatency.attr))
+		pr_err("failed to create freqvar_idlelatency node\n");
 
-	if (!sscanf(buf, "%8d", &input))
-		return -EINVAL;
-
-	cpu_undervolt = input;
-
-	return count;
-}
-
-static ssize_t show_cpu_table_undervolt(struct kobject *kobj,
-				struct kobj_attribute *attr, char *buf)
-{
-	return snprintf(buf, 10, "%d\n",cpu_undervolt);
-}
-
-static struct kobj_attribute cpu_table_undervolt =
-__ATTR(cpu_table_undervolt, 0644,
-		show_cpu_table_undervolt, store_cpu_table_undervolt);
-
-static __init void init_sysfs(void) {
-	if (sysfs_create_file(power_kobj, &cpu_table_undervolt.attr))
-		pr_err("failed to create cpu_table_undervolt node\n");
 }
 
 static __init int init_table(struct exynos_cpufreq_domain *domain)
@@ -1211,9 +1188,6 @@ static __init int init_table(struct exynos_cpufreq_domain *domain)
 
 	for (index = 0; index < domain->table_size; index++) {
 		domain->freq_table[index].driver_data = index;
-
-		/* Undervolt with uV value */
-		volt_table[index] -= cpu_undervolt;
 
 		if (table[index] > domain->max_freq)
 			domain->freq_table[index].frequency = CPUFREQ_ENTRY_INVALID;
@@ -1456,6 +1430,7 @@ static int init_dm(struct exynos_cpufreq_domain *domain,
 	return register_exynos_dm_freq_scaler(domain->dm_type, dm_scaler);
 }
 
+<<<<<<< HEAD
 static unsigned long arg_cpu_min_cl0 = 130000;
 
 static int __init cpufreq_read_cpu_min_cl0(char *cpu_min_cl0)
@@ -1562,6 +1537,8 @@ static __init int cpufreq_read_mif_min(char *mif_min)
 }
 __setup("mif_min=", cpufreq_read_mif_min);
 
+=======
+>>>>>>> parent of 75f6635dddc1 (exynos-acme: added CPU UV - added CPU UC OC)
 static __init int init_domain(struct exynos_cpufreq_domain *domain,
 					struct device_node *dn)
 {
@@ -1589,15 +1566,9 @@ static __init int init_domain(struct exynos_cpufreq_domain *domain,
 	if (!of_property_read_u32(dn, "min-freq", &val))
 		domain->min_freq = max(domain->min_freq, val);
 
-	if (domain->id == 0) {
-		domain->max_freq = arg_cpu_max_cl0;
-		domain->min_freq = arg_cpu_min_cl0;
-	} else if (domain->id == 1) {
-		domain->max_freq = arg_cpu_max_cl1;
-		domain->min_freq = arg_cpu_min_cl1;
-	} else if (domain->id == 2) {
-		domain->max_freq = arg_cpu_max_cl2;
-	}
+    /* Default QoS for user */
+	if (!of_property_read_u32(dn, "user-default-qos", &val))
+		domain->user_default_qos = val;	
 
 	/* If this domain has boost freq, change max */
 	val = exynos_pstate_get_boost_freq(cpumask_first(&domain->cpus));
