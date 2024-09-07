@@ -479,25 +479,6 @@ GPEX_STATIC ssize_t show_gpu_freq_table(char *buf)
 }
 CREATE_SYSFS_KOBJECT_READ_FUNCTION(show_gpu_freq_table)
 
-GPEX_STATIC ssize_t set_gpu_freq_table(const char *buf, size_t count)
-{
-	int id = 4; /* dvfs_g3d */
-	unsigned int rate, volt;
-
-	if (sscanf(buf, "%u %u", &rate, &volt) == 2) {
-		if ((volt < 450000) || (volt > 1000000))
-			goto err;
-		update_fvmap(id, rate, volt);
-		gpex_clock_update_config_data_from_dt();
-		pr_info("%s: updated DVFS: dvfs_g3d - rate: %u kHz - volt: %u uV\n", __func__, rate, volt);
-		return count;
-	}
-
-err:
-	return -EINVAL;
-}
-CREATE_SYSFS_KOBJECT_WRITE_FUNCTION(set_gpu_freq_table)
-
 int gpex_clock_sysfs_init(struct _clock_info *_clk_info)
 {
 	clk_info = _clk_info;
@@ -517,8 +498,7 @@ int gpex_clock_sysfs_init(struct _clock_info *_clk_info)
 	GPEX_UTILS_SYSFS_KOBJECT_FILE_ADD(gpu_mm_min_clock, show_mm_min_lock_dvfs,
 					  set_mm_min_lock_dvfs);
 	GPEX_UTILS_SYSFS_KOBJECT_FILE_ADD_RO(gpu_clock, show_clock);
-	GPEX_UTILS_SYSFS_KOBJECT_FILE_ADD(gpu_freq_table, show_gpu_freq_table,
-					  set_gpu_freq_table);
+	GPEX_UTILS_SYSFS_KOBJECT_FILE_ADD_RO(gpu_freq_table, show_gpu_freq_table);
 
 	return 0;
 }

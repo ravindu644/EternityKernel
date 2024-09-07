@@ -323,6 +323,5 @@ static inline ssize_t gpex_utils_sysfs_endbuf(char *buf, ssize_t len)
  * gpu_model sysfs.
  */
 void gpex_utils_sysfs_set_gpu_model_callback(sysfs_device_read_func show_gpu_model_fn);
-int gpex_clock_update_config_data_from_dt(void);
 
 #endif /* _MALI_EXYNOS_UTILS_H_ */
