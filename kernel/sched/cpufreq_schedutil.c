@@ -20,8 +20,6 @@
 
 #include <trace/events/power.h>
 
-#include <linux/battery_saver.h>
-
 #include "sched.h"
 #include "tune.h"
 #include "ems/ems.h"
@@ -826,7 +824,7 @@ static struct sugov_policy *sugov_policy_alloc(struct cpufreq_policy *policy)
 	return sg_policy;
 }
 
-static inline void sugov_policy_free(struct sugov_policy *sg_policy)
+static void sugov_policy_free(struct sugov_policy *sg_policy)
 {
 	kfree(sg_policy);
 }
