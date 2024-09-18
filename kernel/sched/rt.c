@@ -9,7 +9,6 @@
 #include <linux/slab.h>
 #include <linux/irq_work.h>
 #include <linux/ems.h>
-#include <linux/ems_service.h>
 
 #include "tune.h"
 
@@ -19,13 +18,9 @@
 #ifdef CONFIG_SCHED_USE_FLUID_RT
 struct frt_dom {
 	unsigned int		coverage_ratio;
-	unsigned int		coverage_ratio_boost;
 	unsigned int		coverage_thr;
-	unsigned int		coverage_thr_boost;
 	unsigned int		active_ratio;
-	unsigned int		active_ratio_boost;
 	unsigned int		active_thr;
-	unsigned int		active_thr_boost;
 	int			coregroup;
 	struct cpumask		cpus;
 
@@ -51,9 +46,7 @@ static struct kobject *frt_kobj;
 #define ratio_scale(v, r) (((v) * (r) * 10) >> RATIO_SCALE_SHIFT)
 
 static int frt_set_coverage_ratio(int cpu);
-static int frt_set_coverage_ratio_boost(int cpu);
 static int frt_set_active_ratio(int cpu);
-static int frt_set_active_ratio_boost(int cpu);
 struct frt_attr {
 	struct attribute attr;
 	ssize_t (*show)(struct kobject *, char *);
@@ -95,13 +88,6 @@ static ssize_t show_coverage_ratio(struct kobject *k, char *buf)
 	return sprintf(buf, "%u (%u)\n", dom->coverage_ratio, dom->coverage_thr);
 }
 
-static ssize_t show_coverage_ratio_boost(struct kobject *k, char *buf)
-{
-	struct frt_dom *dom = container_of(k, struct frt_dom, kobj);
-
-	return sprintf(buf, "%u (%u)\n", dom->coverage_ratio_boost, dom->coverage_thr_boost);
-}
-
 static ssize_t show_active_ratio(struct kobject *k, char *buf)
 {
 	struct frt_dom *dom = container_of(k, struct frt_dom, kobj);
@@ -109,21 +95,10 @@ static ssize_t show_active_ratio(struct kobject *k, char *buf)
 	return sprintf(buf, "%u (%u)\n", dom->active_ratio, dom->active_thr);
 }
 
-static ssize_t show_active_ratio_boost(struct kobject *k, char *buf)
-{
-	struct frt_dom *dom = container_of(k, struct frt_dom, kobj);
-
-	return sprintf(buf, "%u (%u)\n", dom->active_ratio_boost, dom->active_thr_boost);
-}
-
 frt_store(coverage_ratio, int, 100);
 frt_attr_rw(coverage_ratio);
-frt_store(coverage_ratio_boost, int, 100);
-frt_attr_rw(coverage_ratio_boost);
 frt_store(active_ratio, int, 100);
 frt_attr_rw(active_ratio);
-frt_store(active_ratio_boost, int, 100);
-frt_attr_rw(active_ratio_boost);
 
 static ssize_t show(struct kobject *kobj, struct attribute *at, char *buf)
 {
@@ -147,9 +122,7 @@ static const struct sysfs_ops frt_sysfs_ops = {
 
 static struct attribute *dom_frt_attrs[] = {
 	&coverage_ratio_attr.attr,
-	&coverage_ratio_boost_attr.attr,
 	&active_ratio_attr.attr,
-	&active_ratio_boost_attr.attr,
 	NULL
 };
 static struct kobj_type ktype_frt = {
@@ -193,10 +166,7 @@ static int frt_find_prefer_cpu(struct task_struct *task)
 	struct frt_dom *dom;
 
 	list_for_each_entry(dom, &frt_list, list) {
-		coverage_thr = (global_boosted() || is_kpp_active())
-			? per_cpu(frt_rqs, cpumask_first(&dom->cpus))->coverage_thr_boost
-			: per_cpu(frt_rqs, cpumask_first(&dom->cpus))->coverage_thr;
-
+		coverage_thr = per_cpu(frt_rqs, cpumask_first(&dom->cpus))->coverage_thr;
 		for_each_cpu_and(cpu, &task->cpus_allowed, &dom->cpus) {
 			allowed_cpu = cpu;
 			if (task->rt.avg.util_avg < coverage_thr)
@@ -221,21 +191,6 @@ static int frt_set_active_ratio(int cpu)
 	return 0;
 }
 
-static int frt_set_active_ratio_boost(int cpu)
-{
-	unsigned long capacity;
-	struct frt_dom *dom = per_cpu(frt_rqs, cpu);
-
-	if (!dom || !cpu_active(cpu))
-		return -1;
-
-	capacity = get_cpu_max_capacity(cpu, 0) *
-			cpumask_weight(cpu_coregroup_mask(cpu));
-	dom->active_thr_boost = ratio_scale(capacity, dom->active_ratio_boost);
-
-	return 0;
-}
-
 static int frt_set_coverage_ratio(int cpu)
 {
 	unsigned long capacity;
@@ -246,20 +201,6 @@ static int frt_set_coverage_ratio(int cpu)
 
 	capacity = get_cpu_max_capacity(cpu, 0);
 	dom->coverage_thr = ratio_scale(capacity, dom->coverage_ratio);
-
-	return 0;
-}
-
-static int frt_set_coverage_ratio_boost(int cpu)
-{
-	unsigned long capacity;
-	struct frt_dom *dom = per_cpu(frt_rqs, cpu);
-
-	if (!dom || !cpu_active(cpu))
-		return -1;
-
-	capacity = get_cpu_max_capacity(cpu, 0);
-	dom->coverage_thr_boost = ratio_scale(capacity, dom->coverage_ratio_boost);
 
 	return 0;
 }
@@ -301,9 +242,7 @@ static void update_activated_cpus(void)
 		}
 
 		capacity = get_cpu_max_capacity(first_cpu, 0) * cpumask_weight(&active_cpus);
-		dom_active_thr = (global_boosted() || is_kpp_active())
-			? ratio_scale(capacity, dom->active_ratio_boost)
-			: ratio_scale(capacity, dom->active_ratio);
+		dom_active_thr = ratio_scale(capacity, dom->active_ratio);
 
 		/* domain is idle */
 		if (dom_util_sum < dom_active_thr) {
@@ -372,26 +311,16 @@ static void frt_parse_dt(struct device_node *dn, struct frt_dom *dom, int cnt)
 	if (!dom->coverage_ratio)
 		dom->coverage_ratio = 100;
 
-	of_property_read_u32(coregroup, "coverage-ratio-boost", &dom->coverage_ratio_boost);
-	if (!dom->coverage_ratio_boost)
-		dom->coverage_ratio_boost = 100;
-
 	of_property_read_u32(coregroup, "active-ratio", &dom->active_ratio);
 	if (!dom->active_ratio)
 		dom->active_thr = 0;
-
-	of_property_read_u32(coregroup, "active-ratio-boost", &dom->active_ratio_boost);
-	if (!dom->active_ratio_boost)
-		dom->active_thr_boost = 0;
 
 	return;
 
 disable:
 	dom->coregroup = cnt;
 	dom->coverage_ratio = 100;
-	dom->coverage_ratio_boost = 100;
 	dom->active_thr = 0;
-	dom->active_thr_boost = 0;
 	pr_err("FRT(%s): failed to parse frt node\n", __func__);
 }
 
@@ -436,10 +365,7 @@ static int __init init_frt(void)
 			per_cpu(frt_rqs, tcpu) = dom;
 
 		frt_set_coverage_ratio(cpu);
-		frt_set_coverage_ratio_boost(cpu);
 		frt_set_active_ratio(cpu);
-		frt_set_active_ratio_boost(cpu);
-
 		list_add_tail(&dom->list, &frt_list);
 	}
 	frt_sysfs_init();
@@ -499,8 +425,11 @@ void init_rt_bandwidth(struct rt_bandwidth *rt_b, u64 period, u64 runtime)
 	rt_b->rt_period_timer.function = sched_rt_period_timer;
 }
 
-static inline void do_start_rt_bandwidth(struct rt_bandwidth *rt_b)
+static void start_rt_bandwidth(struct rt_bandwidth *rt_b)
 {
+	if (!rt_bandwidth_enabled() || rt_b->rt_runtime == RUNTIME_INF)
+		return;
+
 	raw_spin_lock(&rt_b->rt_runtime_lock);
 	if (!rt_b->rt_period_active) {
 		rt_b->rt_period_active = 1;
@@ -516,14 +445,6 @@ static inline void do_start_rt_bandwidth(struct rt_bandwidth *rt_b)
 		hrtimer_start_expires(&rt_b->rt_period_timer, HRTIMER_MODE_ABS_PINNED);
 	}
 	raw_spin_unlock(&rt_b->rt_runtime_lock);
-}
-
-static void start_rt_bandwidth(struct rt_bandwidth *rt_b)
-{
-	if (!rt_bandwidth_enabled() || rt_b->rt_runtime == RUNTIME_INF)
-		return;
-
-	do_start_rt_bandwidth(rt_b);
 }
 
 void init_rt_rq(struct rt_rq *rt_rq)
@@ -1525,17 +1446,13 @@ static void update_curr_rt(struct rq *rq)
 
 	for_each_sched_rt_entity(rt_se) {
 		struct rt_rq *rt_rq = rt_rq_of_se(rt_se);
-		int exceeded;
 
 		if (sched_rt_runtime(rt_rq) != RUNTIME_INF) {
 			raw_spin_lock(&rt_rq->rt_runtime_lock);
 			rt_rq->rt_time += delta_exec;
-			exceeded = sched_rt_runtime_exceeded(rt_rq);
-			if (exceeded)
+			if (sched_rt_runtime_exceeded(rt_rq))
 				resched_curr(rq);
 			raw_spin_unlock(&rt_rq->rt_runtime_lock);
-			if (exceeded)
-				do_start_rt_bandwidth(sched_rt_bandwidth(rt_rq));
 		}
 	}
 }
@@ -3913,8 +3830,6 @@ int sched_group_set_rt_runtime(struct task_group *tg, long rt_runtime_us)
 	rt_runtime = (u64)rt_runtime_us * NSEC_PER_USEC;
 	if (rt_runtime_us < 0)
 		rt_runtime = RUNTIME_INF;
-	else if ((u64)rt_runtime_us > U64_MAX / NSEC_PER_USEC)
-		return -EINVAL;
 
 	return tg_set_rt_bandwidth(tg, rt_period, rt_runtime);
 }
@@ -3934,9 +3849,6 @@ long sched_group_rt_runtime(struct task_group *tg)
 int sched_group_set_rt_period(struct task_group *tg, u64 rt_period_us)
 {
 	u64 rt_runtime, rt_period;
-
-	if (rt_period_us > U64_MAX / NSEC_PER_USEC)
-		return -EINVAL;
 
 	rt_period = rt_period_us * NSEC_PER_USEC;
 	rt_runtime = tg->rt_bandwidth.rt_runtime;
@@ -4009,12 +3921,8 @@ static int sched_rt_global_validate(void)
 
 static void sched_rt_do_global(void)
 {
-	unsigned long flags;
-
-	raw_spin_lock_irqsave(&def_rt_bandwidth.rt_runtime_lock, flags);
 	def_rt_bandwidth.rt_runtime = global_rt_runtime();
 	def_rt_bandwidth.rt_period = ns_to_ktime(global_rt_period());
-	raw_spin_unlock_irqrestore(&def_rt_bandwidth.rt_runtime_lock, flags);
 }
 
 int sched_rt_handler(struct ctl_table *table, int write,
